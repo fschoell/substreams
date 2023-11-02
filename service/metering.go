@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func sendMetering(meter dmetering.Meter, userID, apiKeyID, ip, userMeta, endpoint string, resp proto.Message) {
+func sendMetering(meter dmetering.Meter, userID, apiKeyID, ip, traceId, userMeta, endpoint string, resp proto.Message) {
 	bytesRead := meter.BytesReadDelta()
 	bytesWritten := meter.BytesWrittenDelta()
 
@@ -16,6 +16,7 @@ func sendMetering(meter dmetering.Meter, userID, apiKeyID, ip, userMeta, endpoin
 		UserID:    userID,
 		ApiKeyID:  apiKeyID,
 		IpAddress: ip,
+		TraceId:   traceId,
 		Meta:      userMeta,
 
 		Endpoint: endpoint,
