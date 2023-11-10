@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+* Codegen: substreams-database-change to v1.3, properly generates primary key to support chain reorgs in postgres sink.
+* Sink server: support for deploying sinks with DBT configuration, so that users can deploy their own DBT models (supported on postgres and clickhouse sinks).
+  Example manifest file segment:
+  ```yaml
+  [...]
+  
+  sink:
+    module: db_out
+    type: sf.substreams.sink.sql.v1.Service
+    config:
+      schema: "./schema.sql"
+      wire_protocol_access: true
+      postgraphile_frontend:
+        enabled: true
+      pgweb_frontend:
+        enabled: true
+      dbt:
+        files: "./dbt"
+        run_interval_seconds: 60
+  ```
+  where "./dbt" is a folder containing the dbt project.
+
+* Sink server: added REST interface support for clickhouse sinks.
+  Example manifest file segment:
+  ```yaml
+  [...]
+    
+  sink:
+    module: db_out
+    type: sf.substreams.sink.sql.v1.Service
+    config:
+      schema: "./schema.clickhouse.sql"
+      wire_protocol_access: true
+      engine: clickhouse
+      postgraphile_frontend:
+        enabled: false
+      pgweb_frontend:
+        enabled: false
+      rest_frontend:
+        enabled: true
+  ```
+
+### Fixed
+* Fix `substreams info` cli doc field which wasn't printing any doc output
+
 ## v1.1.20
 
 * Optimized start of output stream in developer mode when start block is in reversible segment and output module does not have any stores in its dependencies.
@@ -23,7 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Fixed stream ending immediately in dev mode when start/end blocks are both 0.
 * Sink-serve: fix missing output details on docker-compose apply errors
 * Codegen: Fixed pluralized entity created for db_out and graph_out
-* 
+
 ## v1.1.18
 
 ### Fixed

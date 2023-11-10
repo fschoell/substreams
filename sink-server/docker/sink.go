@@ -13,7 +13,6 @@ import (
 )
 
 func (e *DockerEngine) newSink(deploymentID string, dbService string, pkg *pbsubstreams.Package, sinkConfig *pbsql.Service) (conf types.ServiceConfig, motd string, err error) {
-
 	name := sinkServiceName(deploymentID)
 
 	configFolder := filepath.Join(e.dir, deploymentID, "config", "sink")
@@ -27,14 +26,17 @@ func (e *DockerEngine) newSink(deploymentID string, dbService string, pkg *pbsub
 	}
 
 	var dsn string
+	var serviceName string
 	switch sinkConfig.Engine {
 	case pbsql.Service_clickhouse:
-		dsn = "clickhouse://dev-node:insecure-change-me-in-prod@postgres:9000/substreams"
+		dsn = "clickhouse://dev-node:insecure-change-me-in-prod@clickhouse:9000/substreams"
 		if sinkConfig.PostgraphileFrontend != nil && sinkConfig.PostgraphileFrontend.Enabled {
 			return conf, motd, fmt.Errorf("postgraphile not supported on clickhouse")
 		}
+		serviceName = "clickhouse"
 	case pbsql.Service_postgres:
 		dsn = "postgres://dev-node:insecure-change-me-in-prod@postgres:5432/substreams?sslmode=disable"
+		serviceName = "postgres"
 	default:
 		return conf, motd, fmt.Errorf("unknown service %q", sinkConfig.Engine)
 	}
@@ -59,7 +61,7 @@ func (e *DockerEngine) newSink(deploymentID string, dbService string, pkg *pbsub
 				Target: "/opt/subservices/config",
 			},
 		},
-		Links:     []string{dbService + ":postgres"},
+		Links:     []string{dbService + ":" + serviceName},
 		DependsOn: []string{dbService},
 		Environment: map[string]*string{
 			"DSN":                  &dsn,

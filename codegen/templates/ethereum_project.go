@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -104,7 +103,7 @@ func NewEthereumProject(name string, moduleName string, chain *EthereumChain, co
 		chain:                       chain,
 		ethereumContracts:           contracts,
 		creationBlockNum:            lowestStartBlock,
-		sqlImportVersion:            "1.0.3",
+		sqlImportVersion:            "1.0.5",
 		graphImportVersion:          "0.1.0",
 		databaseChangeImportVersion: "1.2.1",
 		entityChangeImportVersion:   "1.1.0",
@@ -137,8 +136,8 @@ func (p *EthereumProject) Render() (map[string][]byte, error) {
 		if ethereumProjectEntry == "src/lib.rs.gotmpl" && len(p.ethereumContracts) > 1 {
 			ethereumProjectEntry = "src/multiple_contracts_lib.rs.gotmpl"
 		}
-
-		content, err := ethereumProject.ReadFile(filepath.Join("ethereum", ethereumProjectEntry))
+		// We use directly "/" here as `ethereumProject` is an embed FS and always uses "/"
+		content, err := ethereumProject.ReadFile("ethereum" + "/" + ethereumProjectEntry)
 		if err != nil {
 			return nil, fmt.Errorf("embed read entry %q: %w", ethereumProjectEntry, err)
 		}
@@ -364,30 +363,30 @@ func generateFieldClickhouseTypes(fieldType eth.SolidityType) string {
 
 	case eth.SignedIntegerType:
 		switch {
-		case v.ByteSize <= 8:
+		case v.BitsSize <= 8:
 			return "Int8"
-		case v.ByteSize <= 16:
+		case v.BitsSize <= 16:
 			return "Int16"
-		case v.ByteSize <= 32:
+		case v.BitsSize <= 32:
 			return "Int32"
-		case v.ByteSize <= 64:
+		case v.BitsSize <= 64:
 			return "Int64"
-		case v.ByteSize <= 128:
+		case v.BitsSize <= 128:
 			return "Int128"
 		}
 		return "Int256"
 
 	case eth.UnsignedIntegerType:
 		switch {
-		case v.ByteSize <= 8:
+		case v.BitsSize <= 8:
 			return "UInt8"
-		case v.ByteSize <= 16:
+		case v.BitsSize <= 16:
 			return "UInt16"
-		case v.ByteSize <= 32:
+		case v.BitsSize <= 32:
 			return "UInt32"
-		case v.ByteSize <= 64:
+		case v.BitsSize <= 64:
 			return "UInt64"
-		case v.ByteSize <= 128:
+		case v.BitsSize <= 128:
 			return "UInt128"
 		}
 		return "UInt256"

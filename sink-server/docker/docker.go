@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
@@ -17,14 +16,14 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
-
-	types "github.com/docker/cli/cli/compose/types"
 	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1"
 	"github.com/streamingfast/substreams/manifest"
 	pbsinksvc "github.com/streamingfast/substreams/pb/sf/substreams/sink/service/v1"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
+
+	types "github.com/docker/cli/cli/compose/types"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 type DockerEngine struct {
@@ -96,7 +95,6 @@ func (e *DockerEngine) CheckVersion() error {
 }
 
 func (e *DockerEngine) writeDeploymentInfo(deploymentID string, usedPorts []uint32, runMeFirst []string, svcInfo map[string]string, pkg *pbsubstreams.Package) error {
-
 	pkgMeta := pkg.PackageMeta[0]
 	hash, err := getModuleHash(pkg.SinkModule, pkg)
 	if err != nil {
@@ -227,18 +225,36 @@ func (e *DockerEngine) Info(deploymentID string, zlog *zap.Logger) (pbsinksvc.De
 		return pbsinksvc.DeploymentStatus_UNKNOWN, reasonInternalError, nil, nil, nil, fmt.Errorf("getting status from `docker compose ps` command: %q, %w", out, err)
 	}
 
-	var status pbsinksvc.DeploymentStatus
+	var line []byte
+	// If the output does not start with a '[', add some
+	if !bytes.HasPrefix(out, []byte("[")) {
+		// Split the output by lines
+		lines := bytes.Split(out, []byte("\n"))
 
-	sc := bufio.NewScanner(bytes.NewReader(out))
-	if !sc.Scan() {
-		return 0, reasonInternalError, nil, nil, nil, fmt.Errorf("no output from command")
+		// Remove empty lines
+		var cleanedLines [][]byte
+		for _, l := range lines {
+			if len(l) > 0 {
+				cleanedLines = append(cleanedLines, l)
+			}
+		}
+
+		// Join the cleaned lines with commas
+		line = bytes.Join(cleanedLines, []byte(","))
+
+		// Wrap the result in square brackets
+		line = append([]byte{'['}, line...)
+		line = append(line, ']')
+	} else {
+		line = out
 	}
-	line := sc.Bytes()
 
 	var outputs []*dockerComposePSOutput
 	if err := json.Unmarshal(line, &outputs); err != nil {
 		return 0, reasonInternalError, nil, nil, nil, fmt.Errorf("unmarshalling docker output: %w", err)
 	}
+
+	var status pbsinksvc.DeploymentStatus
 
 	info, err := e.readDeploymentInfo(deploymentID)
 	if err != nil {
@@ -367,7 +383,6 @@ func (e *DockerEngine) list(zlog *zap.Logger) (out []*pbsinksvc.DeploymentWithSt
 }
 
 func (e *DockerEngine) Resume(deploymentID string, _ pbsinksvc.DeploymentStatus, zlog *zap.Logger) (string, error) {
-
 	if e.otherDeploymentIsActive(deploymentID, zlog) {
 		return "", fmt.Errorf("this substreams-sink engine only supports a single active deployment. Stop any active sink before launching another one")
 	}
@@ -507,6 +522,8 @@ func (e *DockerEngine) createManifest(deploymentID string, token string, pkg *pb
 	var services []types.ServiceConfig
 
 	var dbServiceName string
+	var isPostgres, isClickhouse bool
+
 	switch sinkConfig.Engine {
 	case pbsql.Service_clickhouse:
 		db, dbMotd, err := e.newClickhouse(deploymentID, pkg)
@@ -517,6 +534,7 @@ func (e *DockerEngine) createManifest(deploymentID string, token string, pkg *pb
 		servicesDesc[db.Name] = dbMotd
 		runMeFirst = append(runMeFirst, db.Name)
 		services = append(services, db)
+		isClickhouse = true
 
 	case pbsql.Service_postgres, pbsql.Service_unset:
 		pg, pgMotd, err := e.newPostgres(deploymentID, pkg)
@@ -527,6 +545,7 @@ func (e *DockerEngine) createManifest(deploymentID string, token string, pkg *pb
 		servicesDesc[pg.Name] = pgMotd
 		runMeFirst = append(runMeFirst, pg.Name)
 		services = append(services, pg)
+		isPostgres = true
 	}
 
 	sink, sinkMotd, err := e.newSink(deploymentID, dbServiceName, pkg, sinkConfig)
@@ -546,6 +565,30 @@ func (e *DockerEngine) createManifest(deploymentID string, token string, pkg *pb
 		postgraphile, motd := e.newPostgraphile(deploymentID, dbServiceName)
 		servicesDesc[postgraphile.Name] = motd
 		services = append(services, postgraphile)
+	}
+
+	if sinkConfig.DbtConfig != nil && sinkConfig.DbtConfig.Files != nil {
+		var engine string
+		if isPostgres {
+			engine = "postgres"
+		} else if isClickhouse {
+			engine = "clickhouse"
+		}
+
+		if engine != "" {
+			dbt, motd, err := e.newDBT(deploymentID, dbServiceName, sinkConfig.DbtConfig, engine)
+			if err != nil {
+				return nil, nil, nil, nil, fmt.Errorf("creating dbt deployment: %w", err)
+			}
+			servicesDesc[dbt.Name] = motd
+			services = append(services, dbt)
+		}
+	}
+
+	if sinkConfig.RestFrontend != nil && sinkConfig.RestFrontend.Enabled {
+		rest, motd := e.newRestFrontend(deploymentID, dbServiceName)
+		servicesDesc[rest.Name] = motd
+		services = append(services, rest)
 	}
 
 	for _, svc := range services {
