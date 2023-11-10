@@ -16,6 +16,7 @@ func sendMetering(meter dmetering.Meter, userID, apiKeyID, ip, userMeta, endpoin
 		UserID:    userID,
 		ApiKeyID:  apiKeyID,
 		IpAddress: ip,
+		Meta:      userMeta,
 
 		Endpoint: endpoint,
 		Metrics: map[string]float64{
