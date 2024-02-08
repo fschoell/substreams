@@ -229,4 +229,4 @@ replace (
 	github.com/yourbasic/graph v0.0.0-20210606180040-8ecfec1c2869 => github.com/streamingfast/graph v0.0.0-20220329181048-a5710712d873
 )
 
-replace github.com/streamingfast/dmetering => ../dmetering
+replace github.com/streamingfast/dmetering => github.com/fschoell/dmetering v0.0.0-20240206144245-4be35cf75c8a
